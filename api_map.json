@@ -1,0 +1,227 @@
+{
+  "meta": {
+    "portal": "https://buyer.sukandaonelink.com/login",
+    "app": "Next.js SPA (Sukanda Onelink / Diamond group)",
+    "api_base": "https://api-v2.sukandaonelink.com/api/v1",
+    "staging_api_base": "https://staging-api.sukandaonelink.com/api/v1",
+    "discovered": "2026-11-11",
+    "method": "Static analysis of all 47 JS chunks + live authenticated probing",
+    "notes": "Undocumented/private API. Paths and TypeBox validation schemas were embedded in the frontend bundle (_app.js). No public OpenAPI spec exists.",
+    "credentials": "Stored in .env (SUKANDA_EMAIL / SUKANDA_PASSWORD). Never commit .env."
+  },
+  "auth": {
+    "login": {
+      "method": "POST",
+      "path": "/auth/login",
+      "body": {
+        "email": "string (email)",
+        "password": "string",
+        "remember": "boolean, optional",
+        "subscriber": "web_buyer | web_admin | mobile  (buyer portal uses web_buyer)",
+        "push_notification_token": "string, optional"
+      },
+      "response": {"token": "JWT (HS256)", "refresh_token": "string", "is_first_login": "boolean"},
+      "verified": true
+    },
+    "jwt_claims": {
+      "sid": "session uuid",
+      "id": "user/account uuid -> used as /account/{id}",
+      "role": "buyer_bill_to | buyer_ship_to (login page rejects other roles)",
+      "status": "active",
+      "email_status": "approved",
+      "payment_method": "cash | credit",
+      "iss": "sukanda_one_link",
+      "sub": "web_buyer",
+      "iat": "epoch seconds",
+      "exp": "epoch seconds (long-lived, ~45 days)"
+    },
+    "refresh": {"method": "POST", "path": "/auth/refresh-token", "body": {"refresh_token": "string"}},
+    "logout": {"method": "DELETE", "path": "/auth/logout"},
+    "password": {
+      "forgot": {"method": "POST", "path": "/auth/forgot-password"},
+      "create": {"method": "POST", "path": "/auth/create-password"},
+      "reset": {"method": "POST", "path": "/auth/reset-password"},
+      "reset_verify": {"method": "POST", "path": "/auth/reset-password/verify"}
+    },
+    "required_headers": {
+      "Authorization": "Bearer <token>",
+      "Accept": "application/json",
+      "Content-Type": "application/json",
+      "Origin": "https://buyer.sukandaonelink.com",
+      "Referer": "https://buyer.sukandaonelink.com/",
+      "User-Agent": "desktop Chrome UA (login returns 400 without it)",
+      "X-Client-OS": "macos | windows | ...",
+      "X-Client-Device": "Chrome",
+      "X-Client-Version": "120.0.0.0",
+      "access-control-allow-origin": "response header is pinned to https://buyer.sukandaonelink.com (CORS-enforced)"
+    }
+  },
+  "conventions": {
+    "pagination": "Most list endpoints REQUIRE size (1-100) and page (>=1). Response: {data: [...], pagination: {rows, pages}}.",
+    "warehouse": "Catalog/order/promo endpoints require warehouse = ship-to UUID. Source: GET /account/{id} -> ship_tos[0].id. NOTE: GET /user/shipto returns a DIFFERENT id that does NOT work as warehouse.",
+    "errors": "Ajv/TypeBox validation errors: {\"error\":\"Bad Request\",\"message\":\"querystring must have required property 'size'\",\"statusCode\":400}. Unknown routes: {\"message\":\"Route GET:/api/v1/... not found\",\"statusCode\":404}.",
+    "divisions": {"diamond": "Diamond", "trading": "Trading", "fnb": "Fine Foods & Beverage (western / imported food ingredients)", "equipment": "Equipment"},
+    "storages": {"dry": "Dry", "frozen": "Frozen", "dry_ac": "Dry AC", "chilled": "Chilled"},
+    "sorts": ["best_seller_desc", "brand_asc", "brand_desc", "product_name_asc", "product_name_desc", "price_asc", "price_desc"],
+    "order_statuses": ["draft", "submitted", "waiting_for_payment", "processed", "partially_processed", "out_for_delivery", "partially_out_for_delivery", "received", "partially_received", "cancelled"],
+    "search_params": {
+      "search_query": "free text (used by /product)",
+      "search_by": "optional, omitted on /product",
+      "order_by": "string, optional",
+      "direction": "asc | desc"
+    },
+    "units_and_pricing": {
+      "price_basis": "prices[0].price is per SALES UNIT, not per kg. Read sales_unit first: KG = price per kilogram, PC/PAC = price per piece/pack, CAR = price per carton.",
+      "net_weight_trap": "net_weight / net_weight_desc describes one PIECE (e.g. 2.08 KG), which is often smaller than the sale unit (e.g. CAR = 4X2 KG). Do NOT divide price by net_weight to get Rp/kg without checking sales_unit and pack_unit.",
+      "stock_magnifier": "stock is expressed in magnified units. Sale units available ~= stock / stock_magnifier (usually 1000). Example: stock=2000, stock_magnifier=1000 -> ~2 sale units left.",
+      "order_quantity": "minimum_order_quantity and order_quantity_multiple are in grams for KG-sold items (2000 = 2 KG minimum) and in magnified units for PC/CAR items (1000 = 1 pack / 1 carton).",
+      "stock_status_trap": "stock_status can be OUT_OF_STOCK even when stock > 0, when available stock is below minimum_order_quantity (e.g. stock 2500 vs MOQ 2750).",
+      "verified_example": "Illustrative (figures removed for public distribution): a KG-sold SKU lists price P/kg with MOQ 0 and multiple 1000 (= 1 KG); its 2 KG sibling lists a slightly lower P2/kg but MOQ 2000 (minimum spend 2 x P2); a PC-sold 250 GR pack lists P3 per pack => 4 x P3 per kg. Always read sales_unit before dividing."
+    },
+    "catalog_sweep_duplicates": "A full GET /product sweep reports pagination.rows=2183 (22 pages x 100), but only 1856 unique item_code values: 275 codes appear twice. ALWAYS dedupe by item_code when sweeping; prefer targeted search_query for ingredient research.",
+    "large_tool_results": "MCP tool results are capped at 90000 chars. Oversized list results return valid JSON with a _truncated marker (kept/total) instead of a broken string slice; page through with smaller size.",
+    "sales_unit_distribution": "Across 1856 unique products: PC 805, CAR 451, KG 260, PAC 241, UN 87, BOX 5, JAR 4, BT 2, EA 1. 91 SKUs list price 0 or no price; ~5% cannot be normalized to Rp/kg (mostly equipment with unit UN/BOX).",
+    "mcp_v1_1_0": {
+      "structuredContent": "Every tools/call result now includes typed structuredContent plus the text block, with outputSchema declared on all 21 tools (MCP 2025-06-18). Both representations stay in sync even when truncated.",
+      "compare_products": "sukanda_compare_products dedupes by item_code, normalizes Rp/kg via unit_economics(), and returns units_in_stock, minimum_order_units, minimum_spend and orderable. Zero-priced and unnormalizable SKUs sort last with an explanatory note.",
+      "compact_orders": "sukanda_order_history compact=true by default strips ~40 mostly-null price-snapshot fields and image arrays, adds ISO dates, and lets an entire order history fit in one call; compact=false returns the raw payload.",
+      "unit_economics": "compact_product() now embeds unit_economics() so every product result from search/get/substitutions carries normalized pricing."
+    }
+  },
+  "endpoints": {
+    "account_and_user": [
+      {"method": "GET", "path": "/account/me", "params": [], "notes": "Minimal profile; verified 200"},
+      {"method": "GET", "path": "/account/{id}", "params": [], "notes": "FULL profile + addresses[] + ship_tos[]. Verified 200. Key call for warehouse resolution."},
+      {"method": "GET", "path": "/account/{id}/detail", "params": [], "notes": "contract-defined, verified 404 on this account"},
+      {"method": "GET", "path": "/account", "params": ["size", "page"], "notes": "account list"},
+      {"method": "GET", "path": "/user/shipto", "params": ["size", "page"], "notes": "ship-to picker list; verified 200"},
+      {"method": "GET", "path": "/user/buyer", "params": ["size", "page"], "notes": "buyer list"},
+      {"method": "GET", "path": "/user/shipto/{id}/detail", "params": []},
+      {"method": "GET", "path": "/balance", "params": [], "notes": "verified 404"},
+      {"method": "GET", "path": "/bank-account", "params": []},
+      {"method": "GET", "path": "/shipto-deposit", "params": []},
+      {"method": "GET", "path": "/transaction-histories", "params": ["size", "page"], "notes": "verified 404 on this account"},
+      {"method": "POST", "path": "/account/first-login/ack", "params": []},
+      {"method": "POST", "path": "/account/resend-invitation", "params": []},
+      {"method": "POST", "path": "/user/request/change-to-admin", "params": []},
+      {"method": "GET", "path": "/profile/addresses", "params": [], "notes": "frontend route only, no API (404)"},
+      {"method": "PATCH", "path": "/profile/password", "params": []},
+      {"method": "GET", "path": "/profile/payment-info", "params": []}
+    ],
+    "product_catalog": [
+      {"method": "GET", "path": "/product", "params": ["size(required)", "page(required)", "warehouse(uuid)", "search_query", "divisi_code", "category_lv1", "category_lv2", "category_lv3", "storage_code", "brand_name", "sort_by_code", "is_public"], "notes": "MAIN catalog search. Returns {data:[product], pagination:{rows,pages}}. Verified 200. 2,183 products for this ship-to; fnb division = 366."},
+      {"method": "GET", "path": "/product/{id}", "params": ["warehouse(uuid)"], "notes": "Full product detail including composition/information/superiority. Verified via client."},
+      {"method": "GET", "path": "/product/category", "params": ["size", "page", "warehouse", "divisi_code"], "notes": "17 top-level categories with codes + product_count. Verified 200."},
+      {"method": "GET", "path": "/product/sub-category/{id}", "params": ["warehouse"], "notes": "2nd/3rd level categories + counts. Verified 200."},
+      {"method": "GET", "path": "/product/filters", "params": ["distribution_channel"], "notes": "{divisions, storages, sorts}. No params required. Verified 200."},
+      {"method": "GET", "path": "/product/highlights", "params": ["warehouse(required)"], "notes": "Curated home-page sections (new arrivals / most searched / promos). Verified 200, 9 sections."},
+      {"method": "GET", "path": "/product/highlight/{id}", "params": ["warehouse"], "notes": "one highlight head"},
+      {"method": "GET", "path": "/product/highlight/{id}/item", "params": ["warehouse", "size", "page"], "notes": "products inside a highlight section"},
+      {"method": "GET", "path": "/product/keyword", "params": ["keyword", "size", "page", "warehouse"], "notes": "autocomplete keywords. Verified 200 (returns 5). Without size/page/warehouse it 500s."},
+      {"method": "GET", "path": "/product/recommendations", "params": ["search_query(required)", "warehouse", "size", "page"], "notes": "verified requires search_query"},
+      {"method": "GET", "path": "/product/{id}/substitutions", "params": ["warehouse", "size", "page"], "notes": "alternative products"},
+      {"method": "GET", "path": "/product/{id}/suggestions", "params": ["cat1", "page", "warehouse"], "notes": "related products (frontend route)"},
+      {"method": "PUT", "path": "/product-references", "body": {"item_codes": "integer[]"}, "notes": "bulk product reference lookup"},
+      {"method": "GET", "path": "/products", "params": ["size", "page", "search_query", "sort_by", "sort_order"], "notes": "order-template product list"}
+    ],
+    "product_schema": {
+      "description": "Fields of each object in /product data[] (verified live)",
+      "identity": ["id (uuid)", "item_code (int SKU)", "title", "desc", "slug", "barcode", "type", "brand_name", "brand_desc"],
+      "ingredient_research": ["composition (ingredient text)", "information (long product description)", "superiority (selling points)", "desc", "product_storage", "division"],
+      "logistics": ["pack_unit", "sales_unit", "sales_unit_desc", "measurement_unit", "measurement_unit_desc", "dimension", "dimension_unit", "gross_weight", "net_weight", "weight_unit", "net_weight_desc", "volume", "volume_unit", "minimum_order_quantity", "order_quantity_multiple", "stock", "stock_status", "stock_magnifier"],
+      "category": ["category_name", "sub_category_name", "sub_third_category_name", "division", "product_storage"],
+      "commercial": ["prices[] (price tiers)", "free_good_promos[]", "discount_promos[]", "bundled_discount_promos[]", "bundled_free_good_promos[]", "count_voucher", "wishlist_id"],
+      "media": ["product_images[]", "product_image_thumbnails[]", "product_images_medium[]", "product_images_large[]"]
+    },
+    "categories_recipes": [
+      {"method": "GET", "path": "/recipe", "params": ["size", "page", "search_query", "tag"], "notes": "257 recipes. Verified 200."},
+      {"method": "GET", "path": "/recipe/{slugOrID}", "params": [], "notes": "recipe detail with ingredients/steps"},
+      {"method": "GET", "path": "/recipe/homepage", "params": [], "notes": "featured recipe section. Verified 200."},
+      {"method": "GET", "path": "/recipe/section", "params": []},
+      {"method": "GET", "path": "/recipe/tag", "params": []},
+      {"method": "GET", "path": "/recipe/favorite", "params": []},
+      {"method": "POST", "path": "/recipe/favorite", "params": []},
+      {"method": "GET", "path": "/recipe/favorite/tag", "params": []},
+      {"method": "GET/POST", "path": "/recipe/count", "params": []},
+      {"method": "GET", "path": "/wishlist", "params": ["size", "page", "warehouse"]},
+      {"method": "GET", "path": "/wishlist/{category}", "params": []}
+    ],
+    "cart_and_orders": [
+      {"method": "GET", "path": "/cart", "params": ["size", "page", "warehouse"], "notes": "verified 200"},
+      {"method": "POST", "path": "/cart", "params": ["warehouse"], "notes": "add item"},
+      {"method": "PATCH", "path": "/cart/{id}", "params": []},
+      {"method": "DELETE", "path": "/cart/{id}", "params": []},
+      {"method": "DELETE", "path": "/cart/all", "params": ["warehouse"]},
+      {"method": "GET/PATCH", "path": "/cart/batch", "params": []},
+      {"method": "POST/PATCH", "path": "/cart/recommendations", "params": []},
+      {"method": "POST/PATCH", "path": "/cart/total", "params": []},
+      {"method": "POST", "path": "/order", "params": [], "notes": "create order"},
+      {"method": "GET", "path": "/order/histories", "params": ["size", "page", "warehouse", "status", "start_date", "end_date"], "notes": "verified 200, includes items[] with title/item_code/qty/price"},
+      {"method": "GET", "path": "/order/meta/{id}", "params": ["warehouse"], "notes": "order meta detail (needs a real order_meta_id; empty id -> 400)"},
+      {"method": "GET", "path": "/order/meta/{id}/delivery-orders", "params": []},
+      {"method": "GET", "path": "/order/meta/{id}/order-validation", "params": []},
+      {"method": "GET", "path": "/order/waiting-payments/summary", "params": ["warehouse"], "notes": "{count, single_order}. Verified 200."},
+      {"method": "GET", "path": "/order/template", "params": ["size", "page"], "notes": "daftar belanja (shopping lists)"},
+      {"method": "GET", "path": "/order/template/{id}", "params": []},
+      {"method": "GET", "path": "/order/template/{id}/item", "params": ["size", "page"]},
+      {"method": "GET", "path": "/order/template/{id}/item/all", "params": []},
+      {"method": "POST", "path": "/order/template/{id}/add-to-cart", "params": []},
+      {"method": "POST", "path": "/order/payment-proof/upload", "params": []},
+      {"method": "PUT", "path": "/order/payment-proof/ocr", "params": []},
+      {"method": "GET", "path": "/order/payment-proof/{id}", "params": []},
+      {"method": "GET", "path": "/order/purchase-order-document/upload", "params": []},
+      {"method": "GET", "path": "/order/filters", "params": []},
+      {"method": "GET", "path": "/delivery-orders", "params": []},
+      {"method": "GET", "path": "/shipment-dates", "params": []}
+    ],
+    "promos_vouchers": [
+      {"method": "GET", "path": "/banner", "params": [], "notes": "verified 200, active promotional banners"},
+      {"method": "GET", "path": "/promo/buyer", "params": ["warehouse(required)", "size", "page"], "notes": "verified 200"},
+      {"method": "GET", "path": "/promo/buyer/{id}", "params": []},
+      {"method": "GET", "path": "/promo/counter-group", "params": []},
+      {"method": "GET", "path": "/promo/highlights-group", "params": []},
+      {"method": "POST", "path": "/voucher/apply", "params": []},
+      {"method": "POST", "path": "/voucher/validate", "params": []},
+      {"method": "POST", "path": "/voucher/eligibility", "params": []},
+      {"method": "POST", "path": "/voucher/get-by-code", "params": []},
+      {"method": "GET", "path": "/voucher/eligibilities", "params": ["item_code(required)", "warehouse", "size", "page"]},
+      {"method": "GET", "path": "/minimum-spend", "params": []}
+    ],
+    "notifications_misc": [
+      {"method": "GET", "path": "/notification", "params": ["size", "page", "warehouse"], "notes": "verified 200 (restock reminders, promos)"},
+      {"method": "GET/PUT", "path": "/notification/{id}/read", "params": []},
+      {"method": "GET/PUT", "path": "/notification/read-all-unread", "params": []},
+      {"method": "GET", "path": "/notification/count", "params": []},
+      {"method": "GET", "path": "/registration/business-types", "params": [], "notes": "public (no auth)"},
+      {"method": "GET", "path": "/registration/progress", "params": ["Authorization bearer"]},
+      {"method": "POST", "path": "/registration/buyer-session", "params": []},
+      {"method": "GET", "path": "/service-areas", "params": []},
+      {"method": "GET", "path": "/business-segmentations", "params": []}
+    ]
+  },
+  "verified_account_context": {
+    "_note": "Account-specific identifiers are REDACTED for public distribution. Resolve them at runtime via sukanda_context / GET /account/{id}.",
+    "role": "buyer_bill_to",
+    "division": "all",
+    "payment_method": "cash",
+    "credit_limit": 0,
+    "catalog": "buyer",
+    "business_type": "Cafe",
+    "distribution_channel": "DT",
+    "minimum_order": 200000,
+    "warehouse_uuid_from_account": "<redacted: derive from ship_tos[0].id>",
+    "catalog_total_products": 2183,
+    "catalog_fnb_products": 366,
+    "recipe_count": 257,
+    "sample_order_item": "SHREDDED MOZZARELLA 1 KG"
+  },
+  "mcp_tools": [
+    "sukanda_context", "sukanda_search_products", "sukanda_compare_products", "sukanda_get_product",
+    "sukanda_list_categories", "sukanda_get_subcategories", "sukanda_get_filters",
+    "sukanda_highlights", "sukanda_highlight_items", "sukanda_whats_new",
+    "sukanda_search_keywords", "sukanda_recommendations", "sukanda_substitutions",
+    "sukanda_list_recipes", "sukanda_get_recipe", "sukanda_list_promos",
+    "sukanda_cart", "sukanda_order_history", "sukanda_notifications",
+    "sukanda_api_map", "sukanda_raw_get"
+  ]
+}

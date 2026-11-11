@@ -1,0 +1,46 @@
+{
+  "_comment": "EXAMPLE ONLY. Add the 'sukanda-onelink' entry under mcpServers in your MCP client config. Replace every <...> placeholder with your own absolute path; never put real credentials in a config file that could be committed.",
+
+  "workbuddy_mcp.json": {
+    "_file": "~/.workbuddy-ai/mcp.json",
+    "mcpServers": {
+      "sukanda-onelink": {
+        "command": "<absolute-path-to-python3>",
+        "args": ["<absolute-path-to-sukanda-mcp>/server.py"],
+        "env": {}
+      }
+    }
+  },
+
+  "claude_desktop": {
+    "_file": "~/Library/Application Support/Claude/claude_desktop_config.json",
+    "mcpServers": {
+      "sukanda-onelink": {
+        "command": "python3",
+        "args": ["<absolute-path-to-sukanda-mcp>/server.py"]
+      }
+    }
+  },
+
+  "cursor": {
+    "_file": ".cursor/mcp.json",
+    "mcpServers": {
+      "sukanda-onelink": {
+        "command": "python3",
+        "args": ["<absolute-path-to-sukanda-mcp>/server.py"]
+      }
+    }
+  },
+
+  "notes": [
+    "No pip install needed: the server uses only the Python standard library.",
+    "Credentials are read from sukanda-mcp/.env (chmod 600, gitignored) - you do NOT need to put them in the MCP config.",
+    "Copy .env.example to .env and set SUKANDA_EMAIL and SUKANDA_PASSWORD (or SUKANDA_TOKEN + SUKANDA_REFRESH_TOKEN to avoid storing a password on disk).",
+    "All 21 tools are read-only. No cart mutations, order placement, or account changes are exposed.",
+    "v1.1.0: tools return typed structuredContent (MCP 2025-06-18) as well as text.",
+    "Use sukanda_compare_products for cost comparisons: it normalizes prices to Rp/kg across KG, pack and carton sales units.",
+    "sukanda_order_history is compacted by default; pass compact=false for the raw API payload.",
+    "Run python3 check_secrets.py before committing any change.",
+    "After registering, restart / re-trust the MCP server in your client to activate it."
+  ]
+}
