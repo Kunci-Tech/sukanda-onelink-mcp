@@ -37,6 +37,7 @@
     "Credentials are read from sukanda-mcp/.env (chmod 600, gitignored) - you do NOT need to put them in the MCP config.",
     "Copy .env.example to .env and set SUKANDA_EMAIL and SUKANDA_PASSWORD (or SUKANDA_TOKEN + SUKANDA_REFRESH_TOKEN to avoid storing a password on disk).",
     "All 21 tools are read-only. No cart mutations, order placement, or account changes are exposed.",
+    "Guided setup: run 'python3 setup.py' (see README.md). Use 'python3 setup.py --show-config' to generate this config with your real absolute paths.",
     "v1.1.0: tools return typed structuredContent (MCP 2025-06-18) as well as text.",
     "Use sukanda_compare_products for cost comparisons: it normalizes prices to Rp/kg across KG, pack and carton sales units.",
     "sukanda_order_history is compacted by default; pass compact=false for the raw API payload.",

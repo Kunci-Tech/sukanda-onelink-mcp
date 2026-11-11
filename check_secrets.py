@@ -31,7 +31,9 @@ PATTERNS: list[tuple[str, str]] = [
 ]
 
 SKIP_DIRS = {".git", "__pycache__", ".venv", "venv", "node_modules"}
-SKIP_FILES = {".env", "check_secrets.py"}
+# .env and mcp-config.local.json are generated locally and are gitignored.
+# check_secrets.py itself contains the detection patterns, so it is excluded.
+SKIP_FILES = {".env", "mcp-config.local.json", "check_secrets.py"}
 
 
 def candidate_files() -> list[str]:
